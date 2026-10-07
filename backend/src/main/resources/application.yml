@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: pokesync
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pokesync}
+    username: ${DB_USER:pokesync}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+pokesync:
+  poke-api:
+    base-url: ${POKE_API_BASE_URL:https://pokeapi.co/api/v2}
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS,UTC} | %logger{36} | %level | %X{requestId:-system} | %msg%n%nopex"
+  level:
+    root: INFO
+    com.pokesync: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    persist-authorization: false
