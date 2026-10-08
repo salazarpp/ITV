@@ -53,13 +53,18 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(RestPokeApiProvider.class);
     private static final int MAX_CACHE_ENTRIES = 256;
     private static final Duration CACHE_TTL = Duration.ofMinutes(5);
-    private static final int ENRICHMENT_WORKERS = 4;
-    private static final int MAX_PENDING_ENRICHMENTS = 8;
+    // Derived summaries are small and PokeAPI data is static, so they outlive raw resources.
+    private static final int MAX_SUMMARY_ENTRIES = 2048;
+    private static final Duration SUMMARY_TTL = Duration.ofHours(24);
+    // One default page (20 entries) enriches in a single wave.
+    private static final int ENRICHMENT_WORKERS = 20;
+    private static final int MAX_PENDING_ENRICHMENTS = 40;
     private final RestClient client;
     private final Semaphore submissionSlots = new Semaphore(MAX_PENDING_ENRICHMENTS, true);
     private final ThreadPoolExecutor enrichments = createEnrichmentExecutor();
     private final ConcurrentHashMap<String, CompletableFuture<JsonNode>> inFlight = new ConcurrentHashMap<>();
     private final Map<String, CacheEntry> cache = new LinkedHashMap<>(32, 0.75f, true);
+    private final Map<Integer, SummaryEntry> summaries = new LinkedHashMap<>(32, 0.75f, true);
 
     @Autowired
     public RestPokeApiProvider(RestClient.Builder builder, PokeApiProperties properties) {
@@ -81,7 +86,13 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
         try {
             for (JsonNode reference : page.path("results")) {
                 int id = resourceId(requiredText(reference, "url"));
-                pending.add(submitEnrichment(id, MDC.getCopyOfContextMap()));
+                PokemonSummary summary = cachedSummary(id);
+                if (summary != null) {
+                    log.info("POKESYNC-UPSTREAM-0007 | summary_cache_hit id={}", id);
+                    pending.add(CompletableFuture.completedFuture(summary));
+                } else {
+                    pending.add(submitEnrichment(id, MDC.getCopyOfContextMap()));
+                }
             }
             List<PokemonSummary> results = new ArrayList<>();
             for (Future<PokemonSummary> result : pending) results.add(await(result));
@@ -109,9 +120,11 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
                 restoreContext(context);
                 JsonNode pokemon = get("/pokemon/" + id + "/");
                 JsonNode species = species(pokemon);
-                return new PokemonSummary(requiredId(pokemon), requiredText(pokemon, "name"),
+                var summary = new PokemonSummary(requiredId(pokemon), requiredText(pokemon, "name"),
                         optionalText(pokemon.path("sprites"), "front_default"), category(species),
                         mass(pokemon), skills(pokemon));
+                storeSummary(id, summary);
+                return summary;
             } finally {
                 restoreContext(previous);
             }
@@ -246,6 +259,22 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
         }
     }
 
+    private PokemonSummary cachedSummary(int id) {
+        synchronized (summaries) {
+            var entry = summaries.get(id);
+            if (entry != null && entry.expiresAt().isAfter(Instant.now())) return entry.summary();
+            summaries.remove(id);
+            return null;
+        }
+    }
+
+    private void storeSummary(int id, PokemonSummary summary) {
+        synchronized (summaries) {
+            summaries.put(id, new SummaryEntry(summary, Instant.now().plus(SUMMARY_TTL)));
+            while (summaries.size() > MAX_SUMMARY_ENTRIES) summaries.remove(summaries.keySet().iterator().next());
+        }
+    }
+
     private JsonNode get(String path) {
         JsonNode cached = cached(path);
         if (cached != null) {
@@ -334,4 +363,5 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
     }
     private static void unavailable() { throw new PokeApiUnavailableException(); }
     private record CacheEntry(JsonNode body, Instant expiresAt) {}
+    private record SummaryEntry(PokemonSummary summary, Instant expiresAt) {}
 }

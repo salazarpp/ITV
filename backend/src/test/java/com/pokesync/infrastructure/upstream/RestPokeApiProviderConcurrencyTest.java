@@ -29,7 +29,7 @@ import org.springframework.web.client.RestClient;
 class RestPokeApiProviderConcurrencyTest {
     @Test
     void enrichmentOverlapsAcrossPagesWithGlobalCapAndKeepsReferenceOrder() throws Exception {
-        var entered = new CountDownLatch(4);
+        var entered = new CountDownLatch(20);
         var release = new CountDownLatch(1);
         var active = new AtomicInteger();
         var maximum = new AtomicInteger();
@@ -47,25 +47,43 @@ class RestPokeApiProviderConcurrencyTest {
             return success(body(uri));
         });
         try (var provider = fixture.provider()) {
-            var first = task(() -> withContext("first-page", () -> provider.list(3, 0)));
-            var second = task(() -> withContext("second-page", () -> provider.list(3, 3)));
+            var first = task(() -> withContext("first-page", () -> provider.list(15, 0)));
+            var second = task(() -> withContext("second-page", () -> provider.list(15, 15)));
             first.thread().start(); second.thread().start();
             try {
                 await(entered);
-                assertThat(active.get()).isEqualTo(4);
+                assertThat(active.get()).isEqualTo(20);
             } finally { release.countDown(); }
             assertThat(first.future().get(5, TimeUnit.SECONDS).results())
-                    .extracting(PokemonSummary::id).containsExactly(3, 2, 1);
+                    .extracting(PokemonSummary::id).containsExactlyElementsOf(descending(15, 1));
             assertThat(second.future().get(5, TimeUnit.SECONDS).results())
-                    .extracting(PokemonSummary::id).containsExactly(6, 5, 4);
-            assertThat(maximum.get()).isEqualTo(4);
-            assertThat(contexts).containsEntry(1, "first-page").containsEntry(2, "first-page")
-                    .containsEntry(3, "first-page").containsEntry(4, "second-page")
-                    .containsEntry(5, "second-page").containsEntry(6, "second-page");
-            provider.list(1, 6);
-            assertThat(contexts.get(7)).isEqualTo("null");
+                    .extracting(PokemonSummary::id).containsExactlyElementsOf(descending(30, 16));
+            assertThat(maximum.get()).isEqualTo(20);
+            for (int id = 1; id <= 30; id++) {
+                assertThat(contexts).containsEntry(id, id <= 15 ? "first-page" : "second-page");
+            }
+            provider.list(1, 30);
+            assertThat(contexts.get(31)).isEqualTo("null");
             assertThat(MDC.get("requestId")).isNull();
         } finally { release.countDown(); MDC.clear(); }
+    }
+
+    @Test
+    void summaryCacheServesPageAfterRawResourcesAreEvicted() {
+        var detailCalls = new AtomicInteger();
+        var fixture = new Fixture(uri -> {
+            if (uri.getPath().matches(".*/pokemon/[0-9]+/")) detailCalls.incrementAndGet();
+            return success(body(uri));
+        });
+        try (var provider = fixture.provider()) {
+            provider.list(100, 0);
+            // A second full page exceeds the 256-entry raw resource cache.
+            provider.list(100, 100);
+            assertThat(detailCalls.get()).isEqualTo(200);
+            assertThat(provider.list(100, 0).results())
+                    .extracting(PokemonSummary::id).containsExactlyElementsOf(descending(100, 1));
+            assertThat(detailCalls.get()).isEqualTo(200);
+        }
     }
 
     @Test
@@ -171,6 +189,10 @@ class RestPokeApiProviderConcurrencyTest {
         var response = new MockClientHttpResponse(json.getBytes(StandardCharsets.UTF_8), HttpStatus.OK);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
         return response;
+    }
+
+    private static java.util.List<Integer> descending(int from, int to) {
+        return java.util.stream.IntStream.rangeClosed(to, from).map(value -> from + to - value).boxed().toList();
     }
 
     private static int id(URI uri) {
