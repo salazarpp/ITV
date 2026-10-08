@@ -89,7 +89,7 @@ jobs:
       contents: read
       packages: read
     env:
-      DOCKER_CONFIG: ${{ runner.temp }}/pokesync-docker-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_CONFIG: /tmp/pokesync-docker-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
