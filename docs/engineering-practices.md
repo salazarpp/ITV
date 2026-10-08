@@ -30,13 +30,17 @@ PokeAPI access is isolated in a provider adapter. It translates provider respons
 
 A bounded, in-memory cache stores successful provider responses for five minutes. The capacity limit controls memory use, while expiration allows information to be refreshed. Failed responses are not cached. The cache belongs to each backend process and is cleared when that process restarts; it is not shared between replicas.
 
+The browser retains up to ten successful public Pokemon pages for five minutes, keyed by page size and offset. This avoids another API request when returning to a fresh visited page, including after switching sections. Expiration is absolute and capacity eviction is FIFO. Failed or aborted results are excluded, and cancellation prevents stale navigation responses from being stored. This cache holds public metadata only; authentication and local collection data remain outside it. A full reload clears the cache. Pages are loaded on demand without speculative prefetch.
+
+Provider cache decisions are visible at INFO with the request correlation context: initial hit or miss, shared in-flight wait and a successful race recheck. These events distinguish backend resource reuse from browser page reuse and outbound provider requests.
+
 There are no automatic retries. This keeps the number of provider attempts predictable. Page enrichment uses a shared executor with four workers per backend process and a bounded queue; submission backpressure prevents unbounded queued work. Concurrent requests for the same upstream path share one in-flight fetch, including its result or failure. Results retain provider ordering, and workers capture and restore MDC correlation context so request diagnostics remain attributable. An enriched page may still require multiple provider calls, so a per-call timeout does not establish a timeout for the entire page operation. Reduced page latency must be measured before an improvement is claimed.
 
 ## Testing strategy
 
 Unit tests exercise business services and individual security, persistence, HTTP and observability behaviors. Backend integration tests use disposable PostgreSQL and a controlled HTTP provider fixture to exercise the Spring application together with real persistence.
 
-Frontend unit tests exercise the API transport. Browser automation exercises user interactions with intercepted API fixtures across desktop and mobile viewports. These browser tests verify interface behavior independently of provider availability; they do not constitute a full browser-to-live-backend integration test.
+Frontend unit tests cover the API transport and public page cache reuse, expiration, capacity and cancellation behavior. Browser automation exercises user interactions with intercepted API fixtures across desktop and mobile viewports. These browser tests verify interface behavior independently of provider availability; they do not constitute a full browser-to-live-backend integration test.
 
 The pipeline separates backend and frontend validation, preserves reports and sets job time limits. Type checking and production builds complement behavioral tests by checking compatibility and packaging. Passing checks provide evidence for the scenarios exercised, rather than proving complete coverage or production readiness.
 

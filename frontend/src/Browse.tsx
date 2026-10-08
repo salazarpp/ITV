@@ -1,11 +1,16 @@
 import { useCallback, useState } from 'react';
-import { api } from './api';
+import { loadPokemonPage, pokemonPageCache, POKEMON_PAGE_LIMIT } from './pokemonPageCache';
 import { ErrorMessage, Pager, PokemonImage, useRemote } from './shared';
 
 export default function Browse({ onSelect }: { onSelect: (id: number) => void }) {
   const [offset, setOffset] = useState(0);
-  const load = useCallback((signal: AbortSignal) => api.browse(offset, signal), [offset]);
-  const { data, error, loading, reload } = useRemote(load);
+  const load = useCallback(async (signal: AbortSignal) => ({ offset, page: await loadPokemonPage(offset, signal) }), [offset]);
+  const remote = useRemote(load);
+  const cached = pokemonPageCache.get(POKEMON_PAGE_LIMIT, offset);
+  const data = cached ?? (remote.data?.offset === offset ? remote.data.page : undefined);
+  const error = data ? undefined : remote.error;
+  const loading = !data && (remote.loading || (remote.data?.offset !== offset && !error));
+  const reload = remote.reload;
   return <section aria-labelledby="browse-title">
     <div className="section-heading"><div><p className="eyebrow">The field guide</p><h2 id="browse-title">Discover Pokemon</h2></div><span className="count-pill">{data ? `${data.count} Pokemon` : 'PokeAPI collection'}</span></div>
     <ErrorMessage error={error} />

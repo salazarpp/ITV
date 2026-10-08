@@ -239,7 +239,6 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
         synchronized (cache) {
             var entry = cache.get(path);
             if (entry != null && entry.expiresAt().isAfter(Instant.now())) {
-                log.debug("POKESYNC-UPSTREAM-0003 | cache_hit path={}", path);
                 return entry.body();
             }
             cache.remove(path);
@@ -249,13 +248,23 @@ public class RestPokeApiProvider implements PokemonProvider, AutoCloseable {
 
     private JsonNode get(String path) {
         JsonNode cached = cached(path);
-        if (cached != null) return cached;
+        if (cached != null) {
+            log.info("POKESYNC-UPSTREAM-0003 | cache_hit path={}", path);
+            return cached;
+        }
+        log.info("POKESYNC-UPSTREAM-0004 | cache_miss path={}", path);
         CompletableFuture<JsonNode> ownFlight = new CompletableFuture<>();
         CompletableFuture<JsonNode> existing = inFlight.putIfAbsent(path, ownFlight);
-        if (existing != null) return await(existing);
+        if (existing != null) {
+            log.info("POKESYNC-UPSTREAM-0005 | in_flight_wait path={}", path);
+            return await(existing);
+        }
         try {
             // Another owner may have populated the cache before this flight was registered.
             cached = cached(path);
+            if (cached != null) {
+                log.info("POKESYNC-UPSTREAM-0006 | cache_recheck_hit path={}", path);
+            }
             JsonNode response = cached != null ? cached : fetch(path);
             ownFlight.complete(response);
             return response;
