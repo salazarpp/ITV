@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: validation-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
@@ -40,6 +40,104 @@ jobs:
             backend/target/failsafe-reports/
           if-no-files-found: warn
           retention-days: 7
+
+  images:
+    name: Build and publish Docker images
+    needs: [backend, frontend]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Authenticate to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
+      - name: Build and publish images tagged with the commit
+        env:
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image_prefix="ghcr.io/${REPOSITORY,,}"
+          docker build --label "org.opencontainers.image.source=https://github.com/$REPOSITORY" --label "org.opencontainers.image.revision=$COMMIT" -t "$image_prefix-backend:$COMMIT" -f Dockerfile .
+          docker build --label "org.opencontainers.image.source=https://github.com/$REPOSITORY" --label "org.opencontainers.image.revision=$COMMIT" -t "$image_prefix-frontend:$COMMIT" -f deploy/frontend.Dockerfile .
+          docker push "$image_prefix-backend:$COMMIT"
+          docker push "$image_prefix-frontend:$COMMIT"
+          printf 'Backend: `%s-backend:%s`\n\nFrontend: `%s-frontend:%s`\n' "$image_prefix" "$COMMIT" "$image_prefix" "$COMMIT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove registry authentication
+        if: always()
+        run: docker logout ghcr.io
+
+  deploy:
+    name: Deploy PokeSync with Compose on jl-s
+    needs: [images]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.HOMELAB_DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, linux, x64, pokesync-dev]
+    environment: k8s-dev
+    timeout-minutes: 15
+    concurrency:
+      group: pokesync-home-lab
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DOCKER_CONFIG: ${{ runner.temp }}/pokesync-docker-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check target and required configuration
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          HOMELAB_BIND_IP: ${{ vars.HOMELAB_BIND_IP }}
+        run: |
+          set -euo pipefail
+          test "$(hostname)" = jl-S
+          test -n "$DB_PASSWORD"
+          test -n "$JWT_SECRET"
+          test -n "$HOMELAB_BIND_IP"
+          docker network inspect homelab --format '{{.Name}}'
+      - name: Authenticate to GHCR for image retrieval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_USER: ${{ github.actor }}
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          chmod 700 "$DOCKER_CONFIG"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
+      - name: Pull and deploy validated images
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          HOMELAB_BIND_IP: ${{ vars.HOMELAB_BIND_IP }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          export BACKEND_IMAGE="ghcr.io/${REPOSITORY,,}-backend:$COMMIT"
+          export FRONTEND_IMAGE="ghcr.io/${REPOSITORY,,}-frontend:$COMMIT"
+          install -d -m 700 /home/jl/dev/pokesync
+          install -m 600 deploy/home-lab.compose.yml /home/jl/dev/pokesync/compose.yml
+          docker compose --env-file /dev/null -f /home/jl/dev/pokesync/compose.yml pull
+          docker compose --env-file /dev/null -f /home/jl/dev/pokesync/compose.yml up -d
+          # Wait for the real backend through the same-origin nginx proxy.
+          curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 --retry 30 --retry-delay 5 --retry-all-errors --retry-max-time 240 "http://$HOMELAB_BIND_IP:18082/actuator/health"
+          curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 10 "http://$HOMELAB_BIND_IP:18082/" --output /dev/null
+          printf 'Deployed commit `%s` at http://%s:18082\n' "$COMMIT" "$HOMELAB_BIND_IP" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary registry authentication
+        if: always()
+        run: |
+          docker logout ghcr.io || true
+          rm -rf -- "$DOCKER_CONFIG"
 
   frontend:
     name: Frontend unit, type and browser automation tests

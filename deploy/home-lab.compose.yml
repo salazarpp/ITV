@@ -1,0 +1,33 @@
+name: pokesync
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?Set the backend image with a commit SHA tag}
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: pokesync
+      DB_USER: pokesync
+      DB_PASSWORD: ${DB_PASSWORD:?Set the PokeSync database password}
+      JWT_SECRET: ${JWT_SECRET:?Set the JWT signing key}
+      JWT_EXPIRATION_SECONDS: "3600"
+      SPRING_PROFILES_ACTIVE: default
+    networks:
+      - default
+      - homelab
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set the frontend image with a commit SHA tag}
+    restart: unless-stopped
+    ports:
+      - "${HOMELAB_BIND_IP:?Set the server Tailscale IPv4 address}:18082:80"
+    depends_on:
+      - backend
+    networks:
+      - default
+
+networks:
+  homelab:
+    external: true
+    name: homelab

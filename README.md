@@ -115,7 +115,9 @@ npm run test:e2e
 
 JUnit 5/Mockito/AssertJ cover auth/bcrypt/JWT, persistence behavior, Pokemon use cases, provider contracts, HTTP errors/security and safe logging. Surefire runs `*Test`; Failsafe runs `*IT` during `verify`. Integration uses disposable PostgreSQL and a local JDK HTTP provider fixture, without production credentials or live PokeAPI. Browser automation exercises UI workflows with intercepted API fixtures; backend integration separately validates Spring/database/provider wiring. Playwright starts the Vite development server when executed by you or CI.
 
-`.github/workflows/ci.yml` runs on pushes to main, PRs and manual dispatch once on GitHub. Independent backend/frontend jobs have time limits and upload reports even on failure. Public GitHub publication/linking remains your step. The workflow was authored but has not run.
+`.github/workflows/ci.yml` runs on pushes to main, PRs and manual dispatch. Independent backend/frontend jobs have time limits and upload reports even on failure. Both validation jobs passed in [the first GitHub Actions run](https://github.com/salazarpp/ITV/actions/runs/37693655621). After validation on main, the new image job builds and publishes backend/frontend images to GHCR using commit SHA tags; PRs never publish images. This image job has not run yet.
+
+[Home lab Compose delivery](docs/home-lab-compose.md) describes deployment to jl-S using the shared PostgreSQL service. After image publication, a gated deployment job targets a dedicated runner and updates frontend/backend containers. It remains disabled until database provisioning and runner preparation are complete. The existing `k8s-dev` environment holds deployment secrets; its name does not select Kubernetes. Kubernetes manifests remain inactive alternatives.
 
 ## Architecture and assessment artifacts
 
@@ -131,4 +133,4 @@ Passed: frontend TypeScript checks and production build; POM XML and frontend JS
 
 Backend compilation was subsequently verified through the authorized Docker build: Java 21 compiled all 55 production files, Maven reported BUILD SUCCESS and image `pokesync-backend:local` was created. Test compilation and execution were skipped. The frontend development server was started on localhost:5173 for manual review and returned HTTP 200.
 
-Spring/PostgreSQL/PokeAPI/backend-container/browser workflows and the pipeline remain unverified. Backend startup awaits the local database/Flyway authorization required by workspace rules. Run the commands above or inspect the first GitHub Actions result before treating the full delivery as validated. No assistant tests, commits/pushes, deployment, database connections or secret-file reads.
+GitHub's first CI run passed backend and frontend jobs; the assistant did not run tests locally. Full manual application use, live PokeAPI integration, image publication and Kubernetes deployment remain unverified. The frontend development server was subsequently stopped; the backend was never started locally. No assistant tests, commits/pushes, deployment, database connections or secret-file reads.
