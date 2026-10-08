@@ -1,3 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PokeSync Architecture Overview</title>
+<meta name="description" content="PokeSync context, quality goals, architecture, decisions, security, testing, API documentation, delivery, AI-assisted workflow and the task-management exercise.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1d1f23;
+    --muted: #5d636e;
+    --border: #e2e2de;
+    --accent: #2f5d9e;
+    --accent-soft: #eef3fa;
+    --code-bg: #f4f4f2;
+    --head-bg: #f8f8f6;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+  nav.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 32px 16px 32px 24px; border-right: 1px solid var(--border); }
+  nav.toc .brand { font-weight: 700; margin-bottom: 16px; }
+  nav.toc a { display: block; padding: 4px 8px; color: var(--muted); text-decoration: none; border-radius: 6px; font-size: 14px; }
+  nav.toc a:hover, nav.toc a.active { background: var(--accent-soft); color: var(--text); }
+  main { padding: 40px 48px 80px; min-width: 0; }
+  main h1 { font-size: 32px; line-height: 1.2; margin: 0 0 12px; }
+  main h1 + p { color: var(--muted); font-size: 14px; }
+  main h2 { font-size: 24px; margin: 56px 0 12px; padding-top: 16px; border-top: 1px solid var(--border); scroll-margin-top: 16px; }
+  main h3 { font-size: 18px; margin: 32px 0 8px; }
+  a { color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 12px 0; display: block; overflow-x: auto; }
+  th, td { text-align: left; padding: 10px 14px; border: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--head-bg); }
+  code { font: 14px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  pre.text-block code { white-space: pre-wrap; }
+  pre.mermaid { background: var(--bg); text-align: center; visibility: hidden; }
+  pre.mermaid[data-processed="true"] { visibility: visible; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 16px; }
+    main { padding: 24px 16px 64px; }
+    main h1 { font-size: 26px; }
+  }
+  @media print {
+    nav.toc { display: none; }
+    .layout { display: block; }
+    main { padding: 0; }
+    main h2 { break-after: avoid; }
+    pre, table { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="toc" aria-label="Contents"><div class="brand">PokeSync</div><div id="toc-links"></div></nav>
+  <main id="content"><noscript>This page needs JavaScript to render. The same content is in genai-exercise.md.</noscript></main>
+</div>
+<!-- The block below is a verbatim copy of genai-exercise.md. To update, replace it with the Markdown file content. -->
+<script type="text/markdown" id="source">
 # PokeSync: architecture, decisions and AI-assisted delivery
 
 **Authors:** jl, with AI coding assistants (Claude Code, Codex) · **Status:** delivered, latest performance change pending deployment · **Last updated:** 2026-10-08
@@ -435,3 +498,36 @@ To make it runnable: a storage adapter and migration with a user foreign key, th
 | OpenAPI / Swagger | A machine-readable description of the API and a web page to try it. |
 | Correlation ID | A unique ID per request, used to find it in the logs. |
 | Testcontainers | A library that starts a real, disposable database for tests. |
+</script>
+<script type="module">
+  import { marked } from "https://cdn.jsdelivr.net/npm/marked@18.0.13/lib/marked.esm.js";
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.esm.min.mjs";
+
+  const content = document.getElementById("content");
+  content.innerHTML = marked.parse(document.getElementById("source").textContent);
+
+  // The HTML is self-contained, so the link back to itself is not needed.
+  content.querySelectorAll('a[href="genai-exercise.html"]').forEach((link) => link.closest("p")?.remove());
+
+  content.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+    const diagram = document.createElement("pre");
+    diagram.className = "mermaid";
+    diagram.textContent = code.textContent;
+    code.parentElement.replaceWith(diagram);
+  });
+  content.querySelectorAll("pre > code.language-text").forEach((code) => code.parentElement.classList.add("text-block"));
+
+  const toc = document.getElementById("toc-links");
+  content.querySelectorAll("h2").forEach((heading) => {
+    heading.id = heading.textContent.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const link = document.createElement("a");
+    link.href = "#" + heading.id;
+    link.textContent = heading.textContent;
+    toc.append(link);
+  });
+
+  mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "strict" });
+  mermaid.run({ querySelector: ".mermaid" });
+</script>
+</body>
+</html>

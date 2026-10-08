@@ -1,138 +1,192 @@
 # PokeSync
 
-Spring Boot REST API and React frontend for browsing PokeAPI, synchronizing Pokemon into PostgreSQL and maintaining custom names, regions and classifications. Registration and mandatory JWT authentication protect the shared local collection.
+Browse Pokemon from the public [PokeAPI](https://pokeapi.co/), save the ones you want into your own database and give them custom names, regions and classifications. Built with Spring Boot, React and PostgreSQL.
 
-## Requirements and environment
+## Documentation
 
-Java 21/Maven >=3.6.3; Node >=22.12/npm; PostgreSQL for runtime; Docker for container setup and integration tests. Internet access is needed for dependency installation and live public browsing. Tests use isolated provider fixtures.
+- **[Full documentation (HTML)](docs/genai-exercise.html)**: architecture, decisions, security, testing, performance and the AI-assisted workflow, with diagrams. Download it and open it in a browser; GitHub shows `.html` files as source.
+- [Same documentation (Markdown)](docs/genai-exercise.md): renders with diagrams directly on GitHub.
 
-Copy `.env.example` to `.env` only if you do not already have a local file. Set `DB_PASSWORD` and `JWT_SECRET`; the sample has blank secret placeholders. Generate the JWT key yourself with `openssl rand -base64 32`. Do not commit real credentials. JWT requires Base64 with at least 32 decoded bytes and a positive lifetime.
-
-| Variable | Default / purpose |
+| Topic | Document |
 | --- | --- |
-| DB_HOST | localhost; Compose sets database internally |
-| DB_PORT | 5432 |
-| DB_NAME / DB_USER | pokesync |
-| DB_PASSWORD | Required, no default |
-| JWT_SECRET | Required Base64 HMAC key, no default |
-| JWT_EXPIRATION_SECONDS | 3600 |
-| POKE_API_BASE_URL | https://pokeapi.co/api/v2; standalone backend override |
-| SPRING_PROFILES_ACTIVE | default; demo opts into demonstration fixtures |
+| Architecture and design decisions | [docs/architecture.md](docs/architecture.md) |
+| Security | [docs/security.md](docs/security.md) |
+| Validation, errors, logging, caching, testing | [docs/engineering-practices.md](docs/engineering-practices.md) |
+| Configuration, containers and CI/CD | [docs/delivery-decisions.md](docs/delivery-decisions.md) |
+| Home lab deployment (Docker Compose) | [docs/home-lab-compose.md](docs/home-lab-compose.md) |
+| Kubernetes (inactive alternative) | [docs/kubernetes.md](docs/kubernetes.md) |
 
-Compose reads the local `.env`. For standalone Spring execution, export Bash-compatible assignments explicitly:
+## Features
+
+- Paginated Pokemon list with sprite, category, weight and abilities.
+- Pokemon detail with image, stats, description and evolution chain.
+- Save a Pokemon locally and edit its custom name, region and classification.
+- Registration and login with JWT; browsing is public, the local collection requires sign-in.
+- Responsive interface for desktop and mobile.
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | Java 21, Spring Boot, Spring Security (JWT), Spring Data JPA, Flyway, springdoc OpenAPI |
+| Frontend | React 19, TypeScript, Vite |
+| Database | PostgreSQL 17 |
+| Tests | JUnit 5, Mockito, MockMvc, Testcontainers, Vitest, Playwright |
+| Delivery | Docker, Docker Compose, nginx, GitHub Actions |
+
+## Quick start
+
+**Prerequisites:** Docker with Docker Compose. Internet access for PokeAPI.
+
+1. Create your local configuration. Skip the copy if you already have a `.env`.
+
+   ```bash
+   cp .env.example .env
+   openssl rand -base64 32   # paste the output as JWT_SECRET in .env
+   ```
+
+   Set `DB_PASSWORD` and `JWT_SECRET` in `.env`. Never commit real credentials.
+
+2. Start the app with demo data:
+
+   ```bash
+   SPRING_PROFILES_ACTIVE=demo docker compose up --build
+   ```
+
+3. Open the app:
+
+   | What | URL |
+   | --- | --- |
+   | Web app | http://localhost:3000 |
+   | API | http://localhost:8080 |
+   | Swagger UI | http://localhost:8080/swagger-ui/index.html |
+
+**Demo account:** `demo` / `DemoTrainer123!`, with a saved Bulbasaur. The demo data exists only with the `demo` profile; a normal start creates no known-password account.
+
+Stop with `docker compose down`. Data stays in the `postgres-data` volume. While the backend starts, the web app may briefly show a retryable error.
+
+## Configuration
+
+Environment variables, read from `.env` by Docker Compose.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DB_HOST` | `localhost` | Database host (Compose sets it internally) |
+| `DB_PORT` | `5432` | Database port |
+| `DB_NAME` / `DB_USER` | `pokesync` | Database name and user |
+| `DB_PASSWORD` | *required* | Database password |
+| `JWT_SECRET` | *required* | Base64 signing key, at least 32 bytes decoded |
+| `JWT_EXPIRATION_SECONDS` | `3600` | Token lifetime |
+| `POKE_API_BASE_URL` | `https://pokeapi.co/api/v2` | PokeAPI address |
+| `SPRING_PROFILES_ACTIVE` | default | `demo` loads demonstration data |
+
+## Local development
+
+Requirements: Java 21, Maven 3.6.3+, Node 22.12+, a running PostgreSQL.
+
+**Backend** (from the repository root):
 
 ```bash
-set -a
-source .env
-set +a
+set -a; source .env; set +a
 mvn -f backend/pom.xml spring-boot:run
 ```
 
-Start your PostgreSQL instance first. Flyway creates `app_users` and `local_pokemon`; Hibernate validates the schema.
+Flyway creates the tables on startup.
 
-## Container setup and demo
-
-Run these commands yourself from the root after configuring required variables:
+**Frontend** (from `frontend/`):
 
 ```bash
-docker compose up --build
+npm ci --ignore-scripts
+npm run dev
 ```
 
-Frontend: http://localhost:3000. Backend: http://localhost:8080. Database port binds to localhost. Data persists in `postgres-data`. `docker compose down` stops containers without deleting the volume. Backend startup waits for PostgreSQL health; frontend may show a retryable error while Spring initializes.
+Vite forwards API requests to `localhost:8080`.
 
-The root Dockerfile builds the backend without tests. `deploy/frontend.Dockerfile` builds the frontend and serves it with nginx. API/auth/docs/health requests are proxied on the same origin. JWT signing keys are never included in frontend assets.
+## API
 
-```bash
-SPRING_PROFILES_ACTIVE=demo docker compose up --build
-```
+Interactive documentation is generated from the code:
 
-The explicit `demo` profile seeds mock account `demo` / `DemoTrainer123!` and a local Bulbasaur snapshot with custom fields. Seeds are idempotent and require no PokeAPI request. The default profile creates no known-password account. Use demo only for demonstration; public browsing still uses PokeAPI.
+- Swagger UI: `/swagger-ui/index.html`. Click **Authorize** and paste the `accessToken` from login.
+- OpenAPI: `/v3/api-docs` (JSON) and `/v3/api-docs.yaml`.
+- Postman: *Import → Link* and paste `http://localhost:8080/v3/api-docs`.
 
-## Frontend development
+| Method | Route | Access | Description |
+| --- | --- | --- | --- |
+| POST | `/auth/register` | Public | Create an account (`username`, `email`, `password`) |
+| POST | `/auth/login` | Public | Get an `accessToken` |
+| GET | `/api/v1/pokemon?limit=20&offset=0` | Public | Paginated Pokemon list |
+| GET | `/api/v1/pokemon/{id}` | Public | Pokemon detail |
+| POST | `/api/v1/local-pokemon` | Token | Save a Pokemon (`pokeApiId`, `customName`, `region`, `internalClassification`) |
+| GET | `/api/v1/local-pokemon?limit=20&offset=0` | Token | List saved Pokemon |
+| GET | `/api/v1/local-pokemon/{uuid}` | Token | Read a saved Pokemon |
+| PUT | `/api/v1/local-pokemon/{uuid}` | Token | Replace its custom fields |
+| DELETE | `/api/v1/local-pokemon/{uuid}` | Token | Delete it |
+| GET | `/actuator/health` | Public | Application status |
+| GET | `/actuator/metrics` | Token | HTTP and JVM metrics |
 
-In `frontend/`, run `npm ci --ignore-scripts`, then `npm run dev`. Vite proxies backend routes to localhost:8080. The responsive app includes public pagination/detail/evolution, registration/login/logout and authenticated local create/read/update/delete. Tokens stay in memory and expire automatically; refreshing signs out. Local records are shared by authenticated users; no per-user Pokemon ownership requirement was requested.
+Rules: `limit` 1–100, `offset` 0 or more; custom fields are optional, up to 255 characters. Saving the same Pokemon twice returns `409`. Saved Pokemon are shared by all signed-in users.
 
-## API and documentation
-
-Swagger UI: http://localhost:8080/swagger-ui/index.html. OpenAPI JSON: http://localhost:8080/v3/api-docs. YAML: http://localhost:8080/v3/api-docs.yaml. Import the JSON URL into Postman. Swagger's `bearerAuth` accepts the login `accessToken`. Documentation identifies public/protected operations, DTOs, errors and correlation headers.
-
-| Method / route | Access | Result |
-| --- | --- | --- |
-| POST /auth/register | Public | username/email/password ->201 ID/username/email |
-| POST /auth/login | Public | username/password ->200 accessToken/tokenType/expiresIn; no-store |
-| GET /api/v1/pokemon?limit=20&offset=0 | Public | count/results: sprite/category/mass in kg/skills |
-| GET /api/v1/pokemon/{id} | Public | Image/statistics/description/evolution |
-| POST /api/v1/local-pokemon | Bearer JWT | pokeApiId/customName/region/internalClassification ->201 local record and Location |
-| GET /api/v1/local-pokemon?limit=20&offset=0 | Bearer JWT | count/results from PostgreSQL |
-| GET /api/v1/local-pokemon/{uuid} | Bearer JWT | Saved record |
-| PUT /api/v1/local-pokemon/{uuid} | Bearer JWT | Replace custom fields ->200 |
-| DELETE /api/v1/local-pokemon/{uuid} | Bearer JWT | 204 |
-| GET /actuator/health and health probes | Public | Status without diagnostic details |
-| GET /actuator/metrics | Bearer JWT | Available HTTP/JVM metrics |
-
-Pagination: limit 1..100, offset >=0. Custom fields: optional, max 255 characters; blanks become null. Synchronization stores the full upstream detail JSON and a local record. Local reads/updates/deletes work independently of PokeAPI. Duplicate synchronization returns 409. Evolution contains species IDs/names; category is English genus; skills are ability names.
-
-## Errors and CDR-style logs
-
-`@RestControllerAdvice` and `@ExceptionHandler` return a consistent structure:
+Errors always have the same shape:
 
 ```json
 {"status":404,"code":"POKEMON_NOT_FOUND","message":"Pokemon was not found","timestamp":"2026-10-07T12:00:00Z","requestId":"example-request-1"}
 ```
 
-400 invalid payload/parameters; 401 invalid credentials/token; 403 denied access; 404 missing records; 409 duplicate user/synchronization; 502 provider failure/invalid response; 504 provider timeout; 500 unexpected error. Spring Security uses the same structure and retains bearer challenge headers.
+`400` invalid input · `401` missing or invalid token · `403` access denied · `404` not found · `409` duplicate · `502` PokeAPI failed · `504` PokeAPI timed out · `500` unexpected error.
 
-Console format follows CDR:
+Every response carries an `X-Request-ID` header. Use it to find the request in the logs (`docker compose logs -f backend`).
 
-```text
-2026-10-07 12:00:00.000 | RequestLogFilter | INFO | example-request-1 | POKESYNC-HTTP-0001 | start method=GET path=/api/v1/pokemon
-2026-10-07 12:00:00.041 | RequestLogFilter | INFO | example-request-1 | POKESYNC-HTTP-0002 | complete method=GET path=/api/v1/pokemon status=200 durationMs=41
-```
-
-These are format examples, not captured runtime evidence. Optional `X-Request-ID` accepts `[A-Za-z0-9._-]{1,64}`; unsafe/missing values receive a UUID. Every response returns the ID; error JSON includes it. Start/end events include status/duration for successful, rejected and failed requests. Provider fetch events identify upstream phases; INFO events expose `cache_hit` (0003), `cache_miss` (0004), `in_flight_wait` (0005), `cache_recheck_hit` (0006) and `summary_cache_hit` (0007). Each resource lookup logs its initial hit or miss once; wait/recheck events explain shared results without another outbound fetch. Application ready/closing/startup-failure events cover lifecycle changes. Error diagnostics include cause types and application class/method/line locations. Request bodies, incoming query strings, credentials, tokens and raw exception messages are excluded; generated provider pagination paths contain only limit/offset. MDC is cleaned after each request. Follow container output with `docker compose logs -f backend`.
-
-Provider connect/read timeouts are 3s/5s per request with no implicit retries. Cache: 256 successful responses, five-minute TTL; errors are not cached. Enriched page entries are also cached as compact summaries per Pokemon ID (2,048 entries, 24-hour TTL), so revisited pages skip detail and species lookups. Page enrichment shares twenty workers across requests in each backend process, so a default 20-entry page enriches in a single wave, with a bounded queue and submission backpressure. Concurrent fetches for the same upstream path share an in-flight result. Enriched pages preserve provider ordering, and worker logs retain the request's MDC correlation context. A cold page still requires multiple provider calls; per-call timeouts do not impose a whole-page deadline. Any latency improvement remains unverified until measured; duration logs identify slow requests. Health, HTTP/JVM metrics and safe logs provide baseline observability; no hosted monitoring or alert delivery is configured.
-
-The frontend also caches up to ten successful public Pokemon pages for five minutes, keyed by page size and offset. Revisiting a fresh page reuses its data without an API request. This cache survives component navigation within the loaded tab, but a full reload clears it. Failed or aborted responses, authentication and local collection data are not cached; expired or evicted pages are fetched again. No speculative page prefetch is performed.
-
-## Unit, integration and automation tests
-
-Run these yourself. The assistant did not execute tests or start services:
+## Testing
 
 ```bash
-# Unit/MockMvc, no PostgreSQL
-mvn --batch-mode --no-transfer-progress -f backend/pom.xml test
-# Unit + real PostgreSQL integration, Docker required
-mvn --batch-mode --no-transfer-progress -f backend/pom.xml verify
-# Compile/package only
-mvn -f backend/pom.xml -Dmaven.test.skip=true package
-# From frontend/
-npm ci --ignore-scripts
+# Backend unit and web layer tests (no database needed)
+mvn -f backend/pom.xml test
+
+# Backend unit + integration tests with a real PostgreSQL (Docker required)
+mvn -f backend/pom.xml verify
+
+# Frontend (from frontend/)
 npm run typecheck
 npm run test:unit
-npm run build
 npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-JUnit 5/Mockito/AssertJ cover auth/bcrypt/JWT, persistence behavior, Pokemon use cases, provider contracts, HTTP errors/security and safe logging. Surefire runs `*Test`; Failsafe runs `*IT` during `verify`. Integration uses disposable PostgreSQL and a local JDK HTTP provider fixture, without production credentials or live PokeAPI. Browser automation exercises UI workflows with intercepted API fixtures; backend integration separately validates Spring/database/provider wiring. Playwright starts the Vite development server when executed by you or CI.
+| Type | What it covers |
+| --- | --- |
+| Backend unit | Services, repositories, password hashing, logging, PokeAPI client |
+| Web layer | Routes, validation, status codes, JWT protection |
+| Integration | Whole backend with a disposable PostgreSQL and a simulated PokeAPI |
+| Frontend unit | API client and page cache |
+| Browser | Main user flows on desktop and mobile, with simulated API responses |
 
-`.github/workflows/ci.yml` runs on pushes to main, PRs and manual dispatch. Independent backend/frontend jobs have time limits and upload reports even on failure. After validation on main, the image job builds and publishes backend/frontend images to GHCR using commit SHA tags; PRs never publish images. Validation, image publication and Compose deployment all passed in [the first home lab release](https://github.com/salazarpp/ITV/actions/runs/37794947311), deploying commit `f8a43f7` on 2026-10-08.
+Details and test counts: [Testing](docs/genai-exercise.md#7-testing).
 
-[Home lab Compose delivery](docs/home-lab-compose.md) describes deployment to jl-S using the shared PostgreSQL service. The application is available at `http://100.104.27.43:18082` within the tailnet. The first release used an ephemeral runner that was removed after one job. Future automatic deployment is disabled until an available runner/access solution is configured; this does not stop the running application. The existing `k8s-dev` environment holds deployment secrets; its name does not select Kubernetes. Kubernetes manifests remain inactive alternatives.
+## Project structure
 
-## Architecture and assessment artifacts
+```text
+backend/     Spring Boot API (domain, application, infrastructure, presentation)
+frontend/    React app, unit tests (src/) and browser tests (tests/)
+deploy/      nginx config, frontend Dockerfile, home lab Compose, Kubernetes manifests
+docs/        Documentation and the task-management exercise (docs/genai/)
+Dockerfile   Backend image
+compose.yml  Local stack: PostgreSQL, backend, frontend
+```
 
-`domain`/`application`: framework-independent models, ports and use cases. `infrastructure`: PostgreSQL/JPA, PokeAPI, JWT, logging/config. `presentation`: controllers and centralized HTTP errors. Use cases enforce business validation, controllers transport validation. PostgreSQL uniqueness handles concurrent duplicate creation.
+## Deployment
 
-[docs/genai-exercise.md](docs/genai-exercise.md) contains the separate task-management generation prompt, representative scaffold and critical review. That scaffold is outside the Pokemon runtime application.
+GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, pull requests and manual runs:
 
-Primary references: [PokeAPI](https://pokeapi.co/docs/v2/), [Spring Boot3.5](https://docs.spring.io/spring-boot/3.5/), [springdoc](https://springdoc.org/v2/), [Testcontainers](https://java.testcontainers.org/), [Playwright](https://playwright.dev/docs/intro).
+1. Backend and frontend tests run in parallel.
+2. On `main`, both images are built and published, tagged with the commit SHA.
+3. When enabled, the home lab runner deploys them with Docker Compose and checks health.
 
-## Verification limits
+See [docs/home-lab-compose.md](docs/home-lab-compose.md) for the home lab setup.
 
-Passed: frontend TypeScript checks and production build; POM XML and frontend JSON parsing; three YAML configuration parses; static Docker Compose configuration validation using `/dev/null` as its environment file; source whitespace/dependency-direction review. Prepared: 58 backend unit/HTTP/observability tests, eight PostgreSQL integration tests, seven frontend unit cases and three browser scenarios across two viewports. None were executed.
+## Project status
 
-Backend compilation was subsequently verified through the authorized Docker build: Java 21 compiled all 55 production files, Maven reported BUILD SUCCESS and image `pokesync-backend:local` was created. Test compilation and execution were skipped. The frontend development server was started on localhost:5173 for manual review and returned HTTP 200.
+Delivered. Open items, including the measurement of the latest performance change, are listed in [Risks and open items](docs/genai-exercise.md#13-risks-and-open-items).
 
-The home lab release pipeline passed backend/frontend tests, published both images and deployed Compose successfully. Subsequent HTTP checks returned health UP, frontend 200 and a public Pokemon response containing Bulbasaur. Full manual authenticated CRUD and visual review remain pending. Kubernetes was not used. Under an explicit one-time release exception, the assistant provisioned the dedicated application database/role and committed/pushed delivery changes. No local tests or secret-file reads were performed.
+## Authors
+
+Built by jl with AI coding assistants (Claude Code, Codex). How we worked: [How we built it with AI](docs/genai-exercise.md#10-how-we-built-it-with-ai).
