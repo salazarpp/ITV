@@ -26,7 +26,7 @@ On the main branch, image publication depends on both validation jobs succeeding
 
 Both application images are tagged with the complete commit SHA. A deployment can select backend and frontend artifacts from the same revision instead of relying on a moving latest tag. Source and revision metadata are also attached to the images.
 
-The publication job is implemented but has not yet been executed. The earlier backend and frontend validation jobs passed in GitHub Actions. These are separate verification results and should not be confused with a successful Kubernetes deployment.
+The first home lab release passed backend and frontend validation, published both images and deployed the application successfully with Compose on 2026-10-08. These checks verify the implemented delivery path; Kubernetes was not used.
 
 ## Compose home lab
 
@@ -38,4 +38,4 @@ The GitHub environment remains named k8s-dev to preserve its secrets and branch 
 
 The deployment job follows successful image publication, selects both images from the same commit and checks application health after Compose updates the containers. A repository variable keeps deployment disabled until the application's database and dedicated runner are ready.
 
-The public repository makes a persistent runner on the shared home lab a security decision: restricting this job to main does not prevent another workflow from targeting that runner. Runner isolation and approval policy must be considered before permanent registration. The first release uses a one-job ephemeral runner under an explicit one-time authorization, and its dedicated database was provisioned successfully. Image publication and startup are verified through the release pipeline. The Kubernetes resources remain inactive alternatives.
+The public repository makes a persistent runner on the shared home lab a security decision: restricting this job to main does not prevent another workflow from targeting that runner. Runner isolation and approval policy must be considered before permanent registration. The first release used a one-job ephemeral runner under an explicit one-time authorization, and its dedicated database was provisioned successfully. Image publication and startup passed in the release pipeline. The runner was removed after the job, and future deployment was disabled until a durable runner/access solution is selected. The Kubernetes resources remain inactive alternatives.

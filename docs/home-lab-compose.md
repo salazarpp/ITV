@@ -16,7 +16,7 @@ Backend and frontend validation run on GitHub-hosted runners. Successful validat
 
 The deployment job targets a dedicated Linux x64 runner labeled pokesync-dev on jl-S. Runners registered for other repositories are not reused. Deployment jobs are serialized, and new pushes do not cancel an active main-branch deployment. Pull requests continue to validate without publishing or deploying.
 
-The repository variable HOMELAB_DEPLOY_ENABLED must be true before the deployment job can run. It remains false until provisioning and runner preparation are complete. This prevents a code push from attempting to deploy into an unprepared server.
+The repository variable HOMELAB_DEPLOY_ENABLED must be true before the deployment job can run. It was enabled for the first release and reset to false after successful deployment and runner cleanup. Future delivery requires an available runner and deliberate activation; the running application continues independently of this variable.
 
 The existing GitHub environment remains named k8s-dev to preserve its configured secrets and branch restriction; the name is a historical label and does not select Kubernetes. Its HOMELAB_BIND_IP variable identifies the target bind address. DB_PASSWORD and JWT_SECRET are delivered only to the deployment steps that need them.
 
@@ -40,7 +40,7 @@ Initial provisioning succeeded on 2026-10-08 under an explicit one-time release 
 
 ## Runner and activation
 
-The first release uses a one-job ephemeral runner for salazarpp/ITV, operated by jl on jl-S, with the additional label pokesync-dev. Its listener starts only after the expected main-branch validation and image jobs succeed. It is removed after deployment; no permanent runner service is installed. A future dedicated runner needs Docker, Compose and curl and must be running before deployment is enabled. Registration credentials must be supplied directly to the runner tooling, never committed or printed in documentation.
+The first release used a one-job ephemeral runner for salazarpp/ITV, operated by jl on jl-S, with the additional label pokesync-dev. Its listener started only after the expected main-branch validation and image jobs succeeded. It removed its registration after deployment, and its temporary installation was deleted; no permanent runner service was installed. A future dedicated runner needs Docker, Compose and curl and must be running before deployment is enabled. Registration credentials must be supplied directly to the runner tooling, never committed or printed in documentation.
 
 Because the repository is public, a persistent runner with access to the home lab and Docker introduces risk from untrusted workflow code. The deployment job is restricted to main, but labels and conditions in this workflow do not prevent another workflow from targeting the same runner. Do not treat this file as isolation; assess runner isolation and workflow approval policy before registering a persistent runner on the shared server.
 
@@ -56,4 +56,6 @@ The changed workflow must first be committed and pushed by the operator. The ass
 
 Host inspection verified Docker and Compose, the shared homelab network, the running PostgreSQL container's health status and available host resources. YAML and shell syntax can be checked without starting containers.
 
-The dedicated PokeSync role and database were created successfully for the first release. Image publication and application startup must be verified by the release pipeline. A future release still needs an available runner; the temporary first-release runner does not provide permanent automation. The Kubernetes manifests remain inactive alternatives; they are not used by this delivery job.
+The first release completed successfully on 2026-10-08, deploying application commit f8a43f7. The dedicated database and role were created, all validation jobs passed, both images were published and the Compose deployment job passed its HTTP checks. Independent HTTP checks confirmed health UP, frontend status 200 and live Pokemon browsing returning Bulbasaur. Existing server containers retained their running status during the release.
+
+Full manual authenticated CRUD and visual review remain pending. A future release still needs an available runner; the temporary first-release runner does not provide permanent automation. The Kubernetes manifests remain inactive alternatives; they are not used by this delivery job.
