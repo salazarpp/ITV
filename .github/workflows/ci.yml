@@ -16,8 +16,7 @@ concurrency:
 jobs:
   backend:
     name: Backend unit and PostgreSQL integration tests
-    # Route main builds to the home lab and pull requests to GitHub-hosted runners.
-    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && '["self-hosted", "linux", "x64", "pokesync-dev"]' || '["ubuntu-latest"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -46,13 +45,11 @@ jobs:
     name: Build and publish Docker images
     needs: [backend, frontend]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, pokesync-dev]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       packages: write
-    env:
-      DOCKER_CONFIG: /tmp/pokesync-images-docker-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -61,11 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_USER: ${{ github.actor }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$DOCKER_CONFIG"
-          chmod 700 "$DOCKER_CONFIG"
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_USER" --password-stdin
       - name: Build and publish images tagged with the commit
         env:
           REPOSITORY: ${{ github.repository }}
@@ -80,9 +73,7 @@ jobs:
           printf 'Backend: `%s-backend:%s`\n\nFrontend: `%s-frontend:%s`\n' "$image_prefix" "$COMMIT" "$image_prefix" "$COMMIT" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove registry authentication
         if: always()
-        run: |
-          docker logout ghcr.io || true
-          rm -rf -- "$DOCKER_CONFIG"
+        run: docker logout ghcr.io
 
   deploy:
     name: Deploy PokeSync with Compose on jl-s
@@ -150,7 +141,7 @@ jobs:
 
   frontend:
     name: Frontend unit, type and browser automation tests
-    runs-on: ${{ fromJSON(github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && '["self-hosted", "linux", "x64", "pokesync-dev"]' || '["ubuntu-latest"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
       run:
@@ -167,12 +158,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm run build
-      - name: Install Chromium and system dependencies on GitHub-hosted runners
-        if: runner.environment == 'github-hosted'
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Install Chromium on the prepared home lab runner
-        if: runner.environment == 'self-hosted'
-        run: npx playwright install chromium
       - name: Run browser automation with isolated API fixtures
         run: npm run test:e2e
       - name: Preserve browser reports
