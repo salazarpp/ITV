@@ -30,7 +30,7 @@ PokeAPI access is isolated in a provider adapter. It translates provider respons
 
 A bounded, in-memory cache stores successful provider responses for five minutes. The capacity limit controls memory use, while expiration allows information to be refreshed. Failed responses are not cached. The cache belongs to each backend process and is cleared when that process restarts; it is not shared between replicas.
 
-There are no automatic retries. This keeps the number of provider attempts predictable. An enriched page may still require multiple provider calls, so a per-call timeout does not establish a timeout for the entire page operation.
+There are no automatic retries. This keeps the number of provider attempts predictable. Page enrichment uses a shared executor with four workers per backend process and a bounded queue; submission backpressure prevents unbounded queued work. Concurrent requests for the same upstream path share one in-flight fetch, including its result or failure. Results retain provider ordering, and workers capture and restore MDC correlation context so request diagnostics remain attributable. An enriched page may still require multiple provider calls, so a per-call timeout does not establish a timeout for the entire page operation. Reduced page latency must be measured before an improvement is claimed.
 
 ## Testing strategy
 

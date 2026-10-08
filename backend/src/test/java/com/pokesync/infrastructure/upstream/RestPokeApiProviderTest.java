@@ -10,6 +10,7 @@ import com.pokesync.application.exception.PokeApiUnavailableException;
 import com.pokesync.application.exception.PokemonNotFoundException;
 import java.net.SocketTimeoutException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -19,6 +20,7 @@ class RestPokeApiProviderTest {
     private final RestClient.Builder builder = RestClient.builder().baseUrl("https://fixture.invalid/api/v2");
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     private final RestPokeApiProvider provider = new RestPokeApiProvider(builder.build());
+    @AfterEach void closeProvider() { provider.close(); }
     private static final String POKEMON = """
             {"id":25,"name":"pikachu","weight":60,"species":{"url":"https://fixture.invalid/api/v2/pokemon-species/25/"},
              "abilities":[{"ability":{"name":"static"}}],"stats":[{"base_stat":90,"stat":{"name":"speed"}}],
